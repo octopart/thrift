@@ -21,7 +21,7 @@
 #define _THRIFT_TRANSPORT_TSSLSERVERSOCKET_H_ 1
 
 #include <boost/shared_ptr.hpp>
-#include "TServerSocket.h"
+#include <thrift/transport/TServerSocket.h>
 
 namespace apache { namespace thrift { namespace transport {
 
@@ -38,7 +38,7 @@ class TSSLServerSocket: public TServerSocket {
    * @param port    Listening port
    * @param factory SSL socket factory implementation
    */
-  TSSLServerSocket(int port, boost::shared_ptr<TSSLSocketFactory> factory);
+  TSSLServerSocket(THRIFT_SOCKET port, boost::shared_ptr<TSSLSocketFactory> factory);
   /**
    * Constructor.
    *

@@ -21,6 +21,8 @@ unit TestServer;
 
 {$WARN SYMBOL_PLATFORM OFF}
 
+{.$DEFINE RunEndless}   // activate to interactively stress-test the server stop routines via Ctrl+C
+
 interface
 
 uses
@@ -37,6 +39,7 @@ uses
   Thrift.Test,
   Thrift,
   TestConstants,
+  TestServerEvents,
   Contnrs;
 
 type
@@ -46,6 +49,7 @@ type
 
       ITestHandler = interface( TThriftTest.Iface )
         procedure SetServer( const AServer : IServer );
+        procedure TestStop;
       end;
 
       TTestHandlerImpl = class( TInterfacedObject, ITestHandler )
@@ -73,16 +77,44 @@ type
         function testMultiException(const arg0: string; const arg1: string): IXtruct;
         procedure testOneway(secondsToSleep: Integer);
 
-         procedure testStop;
-
+        procedure TestStop;
         procedure SetServer( const AServer : IServer );
       end;
 
-      class procedure LaunchAnonPipeChild( const app : string; const transport : IPipeServer);
+      class procedure LaunchAnonPipeChild( const app : string; const transport : IAnonymousPipeServerTransport);
       class procedure Execute( const args: array of string);
   end;
 
 implementation
+
+
+var g_Handler : TTestServer.ITestHandler = nil;
+
+
+function MyConsoleEventHandler( dwCtrlType : DWORD) : BOOL;  stdcall;
+// Note that this Handler procedure is called from another thread
+var handler : TTestServer.ITestHandler;
+begin
+  result := TRUE;
+  try
+    case dwCtrlType of
+      CTRL_C_EVENT        :  Console.WriteLine( 'Ctrl+C pressed');
+      CTRL_BREAK_EVENT    :  Console.WriteLine( 'Ctrl+Break pressed');
+      CTRL_CLOSE_EVENT    :  Console.WriteLine( 'Received CloseTask signal');
+      CTRL_LOGOFF_EVENT   :  Console.WriteLine( 'Received LogOff signal');
+      CTRL_SHUTDOWN_EVENT :  Console.WriteLine( 'Received Shutdown signal');
+    else
+      Console.WriteLine( 'Received console event #'+IntToStr(Integer(dwCtrlType)));
+    end;
+
+    handler := g_Handler;
+    if handler <> nil then handler.TestStop;
+
+  except
+    // catch all
+  end;
+end;
+
 
 { TTestServer.TTestHandlerImpl }
 
@@ -405,7 +437,7 @@ end;
 { TTestServer }
 
 
-class procedure TTestServer.LaunchAnonPipeChild( const app : string; const transport : IPipeServer);
+class procedure TTestServer.LaunchAnonPipeChild( const app : string; const transport : IAnonymousPipeServerTransport);
 //Launch child process and pass R/W anonymous pipe handles on cmd line.
 //This is a simple example and does not include elevation or other
 //advanced features.
@@ -451,23 +483,30 @@ var
   UseBufferedSockets : Boolean;
   UseFramed : Boolean;
   Port : Integer;
-  AnonPipe : Boolean;
+  AnonPipe, ServerEvents : Boolean;
   sPipeName : string;
   testHandler : ITestHandler;
   testProcessor : IProcessor;
   ServerTrans : IServerTransport;
   ServerEngine : IServer;
-  pipeserver : IPipeServer;
+  anonymouspipe : IAnonymousPipeServerTransport;
+  namedpipe : INamedPipeServerTransport;
   TransportFactory : ITransportFactory;
   ProtocolFactory : IProtocolFactory;
   i : Integer;
   s : string;
   protType, p : TKnownProtocol;
+const
+  // pipe timeouts to be used
+  DEBUG_TIMEOUT   = 30 * 1000;
+  RELEASE_TIMEOUT = 0;  // server-side default
+  TIMEOUT         = RELEASE_TIMEOUT;
 begin
   try
     UseBufferedSockets := False;
     UseFramed := False;
     AnonPipe := FALSE;
+    ServerEvents := FALSE;
     protType := prot_Binary;
     Port := 9090;
     sPipeName := '';
@@ -512,8 +551,12 @@ begin
             Break;
           end;
         end;
-      end else
+      end
+      else if ( s = '-events' ) then
       begin
+        ServerEvents := True;
+      end
+      else begin
         // Fall back to the older boolean syntax
         UseBufferedSockets := StrToBoolDef( args[1], UseBufferedSockets);
       end
@@ -524,11 +567,11 @@ begin
 
     // create protocol factory, default to BinaryProtocol
     case protType of
-      prot_Binary:  ProtocolFactory := TBinaryProtocolImpl.TFactory.Create;
+      prot_Binary:  ProtocolFactory := TBinaryProtocolImpl.TFactory.Create( BINARY_STRICT_READ, BINARY_STRICT_WRITE);
       prot_JSON  :  ProtocolFactory := TJSONProtocolImpl.TFactory.Create;
     else
       ASSERT( FALSE);  // unhandled case!
-      ProtocolFactory := TBinaryProtocolImpl.TFactory.Create;
+      ProtocolFactory := TBinaryProtocolImpl.TFactory.Create( BINARY_STRICT_READ, BINARY_STRICT_WRITE);
     end;
     ASSERT( ProtocolFactory <> nil);
     Console.WriteLine('- '+KNOWN_PROTOCOLS[protType]+' protocol');
@@ -536,13 +579,13 @@ begin
 
     if sPipeName <> '' then begin
       Console.WriteLine('- named pipe ('+sPipeName+')');
-      pipeserver  := TServerPipeImpl.Create( sPipeName);
-      servertrans := pipeserver;
+      namedpipe   := TNamedPipeServerTransportImpl.Create( sPipeName, 4096, PIPE_UNLIMITED_INSTANCES, TIMEOUT);
+      servertrans := namedpipe;
     end
     else if AnonPipe then begin
       Console.WriteLine('- anonymous pipes');
-      pipeserver  := TServerPipeImpl.Create;
-      servertrans := pipeserver;
+      anonymouspipe := TAnonymousPipeServerTransportImpl.Create;
+      servertrans   := anonymouspipe;
     end
     else begin
       Console.WriteLine('- sockets (port '+IntToStr(port)+')');
@@ -570,15 +613,28 @@ begin
 
     testHandler.SetServer( ServerEngine);
 
+    // test events?
+    if ServerEvents then begin
+      Console.WriteLine('- server events test enabled');
+      ServerEngine.ServerEvents := TServerEventsImpl.Create;
+    end;
+
     // start the client now when we have the anon handles, but before the server starts
     if AnonPipe
-    then LaunchAnonPipeChild( ExtractFilePath(ParamStr(0))+'client.exe', pipeserver);
+    then LaunchAnonPipeChild( ExtractFilePath(ParamStr(0))+'client.exe', anonymouspipe);
 
+    // install Ctrl+C handler before the server starts
+    g_Handler := testHandler;
+    SetConsoleCtrlHandler( @MyConsoleEventHandler, TRUE);
 
     Console.WriteLine('');
-    Console.WriteLine('Starting the server ...');
-    serverEngine.Serve;
+    repeat
+      Console.WriteLine('Starting the server ...');
+      serverEngine.Serve;
+    until {$IFDEF RunEndless} FALSE {$ELSE} TRUE {$ENDIF};
+
     testHandler.SetServer( nil);
+    g_Handler := nil;
 
   except
     on E: Exception do
@@ -588,5 +644,6 @@ begin
   end;
   Console.WriteLine( 'done.');
 end;
+
 
 end.

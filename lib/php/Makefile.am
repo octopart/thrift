@@ -40,6 +40,10 @@ phpbasedir = $(phpdir)/Base
 phpbase_DATA = \
   lib/Thrift/Base/TBase.php
 
+phpclassloaderdir = $(phpdir)/ClassLoader
+phpclassloader_DATA = \
+  lib/Thrift/ClassLoader/ThriftClassLoader.php
+
 phpexceptiondir = $(phpdir)/Exception
 phpexception_DATA = \
   lib/Thrift/Exception/TApplicationException.php \
@@ -53,6 +57,7 @@ phpfactory_DATA = \
   lib/Thrift/Factory/TCompactProtocolFactory.php \
   lib/Thrift/Factory/TJSONProtocolFactory.php \
   lib/Thrift/Factory/TProtocolFactory.php \
+  lib/Thrift/Factory/TStringFuncFactory.php \
   lib/Thrift/Factory/TTransportFactory.php
 
 phpprotocoldir = $(phpdir)/Protocol
@@ -74,6 +79,20 @@ phpserializerdir = $(phpdir)/Serializer
 phpserializer_DATA = \
   lib/Thrift/Serializer/TBinarySerializer.php
 
+phpserverdir = $(phpdir)/Server
+phpserver_DATA = \
+  lib/Thrift/Server/TServerSocket.php \
+  lib/Thrift/Server/TForkingServer.php \
+  lib/Thrift/Server/TServer.php \
+  lib/Thrift/Server/TServerTransport.php \
+  lib/Thrift/Server/TSimpleServer.php
+
+phpstringfuncdir = $(phpdir)/StringFunc
+phpstringfunc_DATA = \
+  lib/Thrift/StringFunc/Mbstring.php \
+  lib/Thrift/StringFunc/Core.php \
+  lib/Thrift/StringFunc/TStringFunc.php
+
 phptransportdir = $(phpdir)/Transport
 phptransport_DATA = \
   lib/Thrift/Transport/TBufferedTransport.php \
@@ -92,9 +111,17 @@ phptype_DATA = \
   lib/Thrift/Type/TType.php
 
 EXTRA_DIST = \
-	src \
-	lib \
-	thrift_protocol.ini \
-	README.apache
+  lib \
+  src/autoload.php \
+  src/ext/thrift_protocol/config.w32 \
+  src/ext/thrift_protocol/php_thrift_protocol.cpp \
+  src/ext/thrift_protocol/php_thrift_protocol.h \
+  src/Thrift.php \
+  src/TStringUtils.php \
+  thrift_protocol.ini \
+  README.apache
 
-MAINTAINERCLEANFILES = Makefile Makefile.in
+MAINTAINERCLEANFILES = \
+  Makefile \
+  Makefile.in
+

@@ -69,10 +69,10 @@ namespace Thrift.Protocol
 	1,  1,(byte)'"',  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
   };
 
-		private char[] ESCAPE_CHARS = "\"\\bfnrt".ToCharArray();
+		private char[] ESCAPE_CHARS = "\"\\/bfnrt".ToCharArray();
 
 		private byte[] ESCAPE_CHAR_VALS = {
-	(byte)'"', (byte)'\\', (byte)'\b', (byte)'\f', (byte)'\n', (byte)'\r', (byte)'\t',
+	(byte)'"', (byte)'\\', (byte)'/', (byte)'\b', (byte)'\f', (byte)'\n', (byte)'\r', (byte)'\t',
   };
 
 		private const int DEF_STRING_SIZE = 16;
@@ -407,6 +407,7 @@ namespace Thrift.Protocol
 			}
 			else if ((ch >= 'a') && (ch <= 'f'))
 			{
+				ch += 10;
 				return (byte)((char)ch - 'a');
 			}
 			else
@@ -428,6 +429,7 @@ namespace Thrift.Protocol
 			}
 			else
 			{
+				val -= 10;
 				return (byte)((char)val + 'a');
 			}
 		}
@@ -672,7 +674,7 @@ namespace Thrift.Protocol
 			WriteJSONInteger(b ? (long)1 : (long)0);
 		}
 
-		public override void WriteByte(byte b)
+		public override void WriteByte(sbyte b)
 		{
 			WriteJSONInteger((long)b);
 		}
@@ -861,7 +863,7 @@ namespace Thrift.Protocol
 				}
 				try
 				{
-					return Double.Parse(ReadJSONNumericChars());
+					return Double.Parse(ReadJSONNumericChars(), CultureInfo.InvariantCulture);
 				}
 				catch (FormatException)
 				{
@@ -1033,9 +1035,9 @@ namespace Thrift.Protocol
 			return (ReadJSONInteger() == 0 ? false : true);
 		}
 
-		public override byte ReadByte()
+		public override sbyte ReadByte()
 		{
-			return (byte)ReadJSONInteger();
+			return (sbyte)ReadJSONInteger();
 		}
 
 		public override short ReadI16()

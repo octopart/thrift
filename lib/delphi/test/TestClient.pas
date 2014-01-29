@@ -19,6 +19,9 @@
 
 unit TestClient;
 
+{.$DEFINE StressTest}   // activate to stress-test the server with frequent connects/disconnects
+{.$DEFINE PerfTest}     // activate to activate the performance test
+
 interface
 
 uses
@@ -63,6 +66,9 @@ type
 
     procedure ClientTest;
     procedure JSONProtocolReadWriteTest;
+    {$IFDEF StressTest}
+    procedure StressTest(const client : TThriftTest.Iface);
+    {$ENDIF}
   protected
     procedure Execute; override;
   public
@@ -116,6 +122,11 @@ var
   streamtrans : IStreamTransport;
   http : IHTTPClient;
   protType, p : TKnownProtocol;
+const
+  // pipe timeouts to be used
+  DEBUG_TIMEOUT   = 30 * 1000;
+  RELEASE_TIMEOUT = DEFAULT_THRIFT_PIPE_TIMEOUT;
+  TIMEOUT         = RELEASE_TIMEOUT;
 begin
   bBuffered := False;;
   bFramed := False;
@@ -176,6 +187,10 @@ begin
           end
           else if (args[i] = '-anon') then  // -anon <hReadPipe> <hWritePipe>
           begin
+            if Length(args) <= (i+2) then begin
+              Console.WriteLine('Invalid args: -anon <hRead> <hWrite> or use "server.exe -anon"');
+              Halt(1);
+            end;
             Console.WriteLine('Anonymous pipes transport');
             Inc( i);
             hAnonRead := THandle( StrToIntDef( args[i], Integer(INVALID_HANDLE_VALUE)));
@@ -213,6 +228,13 @@ begin
       end;
     end;
 
+    // In the anonymous pipes mode the client is launched by the test server
+    // -> behave nicely and allow for attaching a debugger to this process
+    if bAnonPipe and not IsDebuggerPresent
+    then MessageBox( 0, 'Attach Debugger and/or click OK to continue.',
+                        'Thrift TestClient (Delphi)',
+                        MB_OK or MB_ICONEXCLAMATION);
+
     SetLength( threads, FNumThread);
     dtStart := Now;
 
@@ -222,11 +244,11 @@ begin
       begin
         if sPipeName <> '' then begin
           Console.WriteLine('Using named pipe ('+sPipeName+')');
-          streamtrans := TNamedPipeImpl.Create( sPipeName);
+          streamtrans := TNamedPipeTransportClientEndImpl.Create( sPipeName, 0, nil, TIMEOUT);
         end
         else if bAnonPipe then begin
           Console.WriteLine('Using anonymous pipes ('+IntToStr(Integer(hAnonRead))+' and '+IntToStr(Integer(hAnonWrite))+')');
-          streamtrans := TAnonymousPipeImpl.Create( hAnonRead, hAnonWrite, FALSE);
+          streamtrans := TAnonymousPipeTransportImpl.Create( hAnonRead, hAnonWrite, FALSE);
         end
         else begin
           Console.WriteLine('Using sockets ('+host+' port '+IntToStr(port)+')');
@@ -236,7 +258,7 @@ begin
         trans := streamtrans;
 
         if bBuffered then begin
-          trans := TBufferedTransportImpl.Create( streamtrans);
+          trans := TBufferedTransportImpl.Create( streamtrans, 32);  // small buffer to test read()
           Console.WriteLine('Using buffered transport');
         end;
 
@@ -254,11 +276,11 @@ begin
 
       // create protocol instance, default to BinaryProtocol
       case protType of
-        prot_Binary:  prot := TBinaryProtocolImpl.Create( trans);
+        prot_Binary:  prot := TBinaryProtocolImpl.Create( trans, BINARY_STRICT_READ, BINARY_STRICT_WRITE);
         prot_JSON  :  prot := TJSONProtocolImpl.Create( trans);
       else
         ASSERT( FALSE);  // unhandled case!
-        prot := TBinaryProtocolImpl.Create( trans);  // use default
+        prot := TBinaryProtocolImpl.Create( trans, BINARY_STRICT_READ, BINARY_STRICT_WRITE);  // use default
       end;
 
       thread := TClientThread.Create( trans, prot, FNumIteration);
@@ -354,6 +376,10 @@ begin
   client := TThriftTest.TClient.Create( FProtocol);
   FTransport.Open;
 
+  {$IFDEF StressTest}
+  StressTest( client);
+  {$ENDIF StressTest}
+
   // in-depth exception test
   // (1) do we get an exception at all?
   // (2) do we get the right exception?
@@ -405,6 +431,11 @@ begin
 
   s := client.testString('Test');
   Expect( s = 'Test', 'testString(''Test'') = "'+s+'"');
+
+  s := client.testString(HUGE_TEST_STRING);
+  Expect( length(s) = length(HUGE_TEST_STRING),
+          'testString( lenght(HUGE_TEST_STRING) = '+IntToStr(Length(HUGE_TEST_STRING))+') '
+         +'=> length(result) = '+IntToStr(Length(s)));
 
   i8 := client.testByte(1);
   Expect( i8 = 1, 'testByte(1) = ' + IntToStr( i8 ));
@@ -815,6 +846,7 @@ begin
   Expect( TRUE, 'Test Oneway(1)');  // success := no exception
 
   // call time
+  {$IFDEF PerfTest}
   StartTestGroup( 'Test Calltime()');
   StartTick := GetTIckCount;
   for k := 0 to 1000 - 1 do
@@ -822,11 +854,31 @@ begin
     client.testVoid();
   end;
   Console.WriteLine(' = ' + FloatToStr( (GetTickCount - StartTick) / 1000 ) + ' ms a testVoid() call' );
+  {$ENDIF PerfTest}
 
   // no more tests here
   StartTestGroup( '');
 end;
 
+
+{$IFDEF StressTest}
+procedure TClientThread.StressTest(const client : TThriftTest.Iface);
+begin
+  while TRUE do begin
+    try
+      if not FTransport.IsOpen then FTransport.Open;   // re-open connection, server has already closed
+      try
+        client.testString('Test');
+        Write('.');
+      finally
+        if FTransport.IsOpen then FTransport.Close;
+      end;
+    except
+      on e:Exception do Writeln(#10+e.message);
+    end;
+  end;
+end;
+{$ENDIF}
 
 procedure TClientThread.JSONProtocolReadWriteTest;
 // Tests only then read/write procedures of the JSON protocol
@@ -846,6 +898,9 @@ const
   TEST_DOUBLE  = -1.234e-56;
   DELTA_DOUBLE = TEST_DOUBLE * 1e-14;
   TEST_STRING  = 'abc-'#$00E4#$00f6#$00fc; // german umlauts (en-us: "funny chars")
+  // test both possible solidus encodings
+  SOLIDUS_JSON_DATA = '"one/two\/three"';
+  SOLIDUS_EXCPECTED = 'one/two/three';
 begin
   stm  := TStringStream.Create;
   try
@@ -909,6 +964,17 @@ begin
     else Expect( FALSE, 'Binary data check at offset '+IntToStr(iErr));
 
     Expect( stm.Position = stm.Size, 'Stream position after read');
+
+    // Solidus can be encoded in two ways. Make sure we can read both
+    stm.Position := 0;
+    stm.Size     := 0;
+    stm.WriteString(SOLIDUS_JSON_DATA);
+    stm.Position := 0;
+    prot := TJSONProtocolImpl.Create(
+              TStreamTransportImpl.Create(
+                TThriftStreamAdapterDelphi.Create( stm, FALSE), nil));
+    Expect( prot.ReadString = SOLIDUS_EXCPECTED, 'Solidus encoding');
+
 
   finally
     stm.Free;
@@ -1031,6 +1097,7 @@ end;
 
 constructor TThreadConsole.Create(AThread: TThread);
 begin
+  inherited Create;
   FThread := AThread;
 end;
 

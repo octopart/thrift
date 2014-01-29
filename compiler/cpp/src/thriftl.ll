@@ -33,13 +33,26 @@
  * We should revert the Makefile.am changes once Apple ships a reasonable
  * GCC.
  */
+#ifdef __GNUC__
 #pragma GCC diagnostic ignored "-Wunused-function"
 #pragma GCC diagnostic ignored "-Wunused-label"
+#endif
 
+#ifdef _MSC_VER
+//warning C4102: 'find_rule' : unreferenced label
+#pragma warning(disable:4102)
+//avoid isatty redefinition
+#define YY_NEVER_INTERACTIVE 1
+#endif
+
+#include <cassert>
 #include <string>
 #include <errno.h>
 #include <stdlib.h>
 
+#ifdef _MSC_VER
+#include "windows/config.h"
+#endif
 #include "main.h"
 #include "globals.h"
 #include "parse/t_program.h"
@@ -89,7 +102,7 @@ void unexpected_token(char* text) {
 intconstant   ([+-]?[0-9]+)
 hexconstant   ("0x"[0-9A-Fa-f]+)
 dubconstant   ([+-]?[0-9]*(\.[0-9]+)?([eE][+-]?[0-9]+)?)
-identifier    ([a-zA-Z_][\.a-zA-Z_0-9]*)
+identifier    ([a-zA-Z_](\.[a-zA-Z_0-9]|[a-zA-Z_0-9])*)
 whitespace    ([ \t\r\n]*)
 sillycomm     ("/*""*"*"*/")
 multicomm     ("/*"[^*]"/"*([^*/]|[^*]"/"|"*"[^/])*"*"*"*/")
@@ -97,7 +110,7 @@ doctext       ("/**"([^*/]|[^*]"/"|"*"[^/])*"*"*"*/")
 comment       ("//"[^\n]*)
 unixcomment   ("#"[^\n]*)
 symbol        ([:;\,\{\}\(\)\=<>\[\]])
-st_identifier ([a-zA-Z-][\.a-zA-Z_0-9-]*)
+st_identifier ([a-zA-Z-](\.[a-zA-Z_0-9-]|[a-zA-Z_0-9-])*)
 literal_begin (['\"])
 
 %%
@@ -143,8 +156,14 @@ literal_begin (['\"])
 "double"             { return tok_double;               }
 "string"             { return tok_string;               }
 "binary"             { return tok_binary;               }
-"slist"              { return tok_slist;                }
-"senum"              { return tok_senum;                }
+"slist" {
+  pwarning(0, "\"slist\" is deprecated and will be removed in a future compiler version.  This type should be replaced with \"string\".\n");
+  return tok_slist;
+}
+"senum" {
+  pwarning(0, "\"senum\" is deprecated and will be removed in a future compiler version.  This type should be replaced with \"string\".\n");
+  return tok_senum;
+}
 "map"                { return tok_map;                  }
 "list"               { return tok_list;                 }
 "set"                { return tok_set;                  }
@@ -360,9 +379,16 @@ literal_begin (['\"])
   if (g_parse_mode == PROGRAM) {
     clear_doctext();
     g_doctext = strdup(yytext + 3);
-    g_doctext[strlen(g_doctext) - 2] = '\0';
+    assert(strlen(g_doctext) >= 2);
+    g_doctext[strlen(g_doctext) - 2] = ' ';
+    g_doctext[strlen(g_doctext) - 1] = '\0';
     g_doctext = clean_up_doctext(g_doctext);
     g_doctext_lineno = yylineno;
+    if(g_program_doctext_candidate == NULL){
+      g_program_doctext_candidate = strdup(g_doctext);
+      g_program_doctext_lineno = g_doctext_lineno;
+      g_program_doctext_status = STILL_CANDIDATE;
+    }
   }
 }
 

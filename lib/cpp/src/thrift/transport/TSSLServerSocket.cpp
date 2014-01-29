@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#include "TSSLServerSocket.h"
-#include "TSSLSocket.h"
+#include <thrift/transport/TSSLServerSocket.h>
+#include <thrift/transport/TSSLSocket.h>
 
 namespace apache { namespace thrift { namespace transport {
 
@@ -27,7 +27,7 @@ using namespace boost;
 /**
  * SSL server socket implementation.
  */
-TSSLServerSocket::TSSLServerSocket(int port,
+TSSLServerSocket::TSSLServerSocket(THRIFT_SOCKET port,
                                    shared_ptr<TSSLSocketFactory> factory):
                                    TServerSocket(port), factory_(factory) {
   factory_->server(true);

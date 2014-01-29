@@ -24,7 +24,8 @@ program server;
 uses
   SysUtils,
   TestServer in 'TestServer.pas',
-  Thrift.Test in 'gen-delphi\Thrift.Test.pas',
+  TestServerEvents in 'TestServerEvents.pas',
+  Thrift.Test,  // in gen-delphi folder
   Thrift in '..\src\Thrift.pas',
   Thrift.Transport in '..\src\Thrift.Transport.pas',
   Thrift.Transport.Pipes in '..\src\Thrift.Transport.Pipes.pas',
@@ -54,7 +55,7 @@ begin
       args[i-1] := arg;
     end;
     TTestServer.Execute( args );
-    Readln;
+    Writeln('Press ENTER to close ... '); Readln;
   except
     on E: Exception do
       Writeln(E.ClassName, ': ', E.Message);

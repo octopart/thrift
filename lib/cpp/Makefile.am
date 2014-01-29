@@ -48,7 +48,7 @@ pkgconfig_DATA += thrift-qt.pc
 endif
 
 AM_CXXFLAGS = -Wall
-AM_CPPFLAGS = $(BOOST_CPPFLAGS) -I$(srcdir)/src -I$(srcdir)/src/thrift
+AM_CPPFLAGS = $(BOOST_CPPFLAGS) -I$(srcdir)/src
 AM_LDFLAGS = $(BOOST_LDFLAGS)
 
 # Define the source files for the module
@@ -63,6 +63,7 @@ libthrift_la_SOURCES = src/thrift/Thrift.cpp \
                        src/thrift/protocol/TDenseProtocol.cpp \
                        src/thrift/protocol/TJSONProtocol.cpp \
                        src/thrift/protocol/TBase64Utils.cpp \
+                       src/thrift/protocol/TMultiplexedProtocol.cpp \
                        src/thrift/transport/TTransportException.cpp \
                        src/thrift/transport/TFDTransport.cpp \
                        src/thrift/transport/TFileTransport.cpp \
@@ -123,12 +124,14 @@ libthriftqt_la_LDFLAGS   = -release $(VERSION) $(BOOST_LDFLAGS) $(QT_LIBS)
 include_thriftdir = $(includedir)/thrift
 include_thrift_HEADERS = \
                          $(top_builddir)/config.h \
+                         src/thrift/thrift-config.h \
                          src/thrift/TDispatchProcessor.h \
                          src/thrift/Thrift.h \
                          src/thrift/TReflectionLocal.h \
                          src/thrift/TProcessor.h \
                          src/thrift/TApplicationException.h \
-                         src/thrift/TLogging.h
+                         src/thrift/TLogging.h \
+                         src/thrift/cxxfunctional.h
 
 include_concurrencydir = $(include_thriftdir)/concurrency
 include_concurrency_HEADERS = \
@@ -138,6 +141,10 @@ include_concurrency_HEADERS = \
                          src/thrift/concurrency/Monitor.h \
                          src/thrift/concurrency/PlatformThreadFactory.h \
                          src/thrift/concurrency/PosixThreadFactory.h \
+                         src/thrift/concurrency/StdMonitor.cpp \
+                         src/thrift/concurrency/StdMutex.cpp \
+                         src/thrift/concurrency/StdThreadFactory.cpp \
+                         src/thrift/concurrency/StdThreadFactory.h \
                          src/thrift/concurrency/Thread.h \
                          src/thrift/concurrency/ThreadManager.h \
                          src/thrift/concurrency/TimerManager.h \
@@ -154,6 +161,8 @@ include_protocol_HEADERS = \
                          src/thrift/protocol/TDebugProtocol.h \
                          src/thrift/protocol/TBase64Utils.h \
                          src/thrift/protocol/TJSONProtocol.h \
+                         src/thrift/protocol/TMultiplexedProtocol.h \
+                         src/thrift/protocol/TProtocolDecorator.h \
                          src/thrift/protocol/TProtocolTap.h \
                          src/thrift/protocol/TProtocolException.h \
                          src/thrift/protocol/TVirtualProtocol.h \
@@ -161,6 +170,7 @@ include_protocol_HEADERS = \
 
 include_transportdir = $(include_thriftdir)/transport
 include_transport_HEADERS = \
+                         src/thrift/transport/PlatformSocket.h \
                          src/thrift/transport/TFDTransport.h \
                          src/thrift/transport/TFileTransport.h \
                          src/thrift/transport/TSimpleFileTransport.h \
@@ -194,7 +204,8 @@ include_server_HEADERS = \
 include_processordir = $(include_thriftdir)/processor
 include_processor_HEADERS = \
                          src/thrift/processor/PeekProcessor.h \
-                         src/thrift/processor/StatsProcessor.h
+                         src/thrift/processor/StatsProcessor.h \
+                         src/thrift/processor/TMultiplexedProcessor.h
 
 include_asyncdir = $(include_thriftdir)/async
 include_async_HEADERS = \

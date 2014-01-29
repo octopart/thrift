@@ -86,6 +86,7 @@ implementation
 constructor TSerializer.Create();
 // Create a new TSerializer that uses the TBinaryProtocol by default.
 begin
+  //no inherited;  
   Create( TBinaryProtocolImpl.TFactory.Create);
 end;
 
@@ -138,7 +139,6 @@ procedure TSerializer.Serialize( const input : IBase; const aStm : TStream);
 // Serialize the Thrift object into a byte array. The process is simple,
 // just clear the byte array output, write the object into it, and grab the
 // raw bytes. 
-var iBytes : Int64;
 const COPY_ENTIRE_STREAM = 0;
 begin
   try
@@ -157,6 +157,7 @@ end;
 constructor TDeserializer.Create();
 // Create a new TDeserializer that uses the TBinaryProtocol by default.
 begin
+  //no inherited;  
   Create( TBinaryProtocolImpl.TFactory.Create);
 end;
 

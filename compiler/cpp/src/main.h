@@ -48,9 +48,19 @@ void pdebug(const char* fmt, ...);
 void pwarning(int level, const char* fmt, ...);
 
 /**
+ * Print verbose output message
+ */
+void pverbose(const char* fmt, ...);
+
+/**
  * Failure!
  */
 void failure(const char* fmt, ...);
+
+/**
+ * Check simple identifier names
+ */
+void validate_simple_identifier(const char* identifier);
 
 /**
  * Check constant types
@@ -91,6 +101,12 @@ void clear_doctext();
  * Cleans up text commonly found in doxygen-like comments
  */
 char* clean_up_doctext(char* doctext);
+
+/**
+ * We are sure the program doctext candidate is really the program doctext.
+ */
+void declare_valid_program_doctext();
+
 
 /**
  * Flex utilities

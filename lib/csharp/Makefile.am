@@ -19,7 +19,9 @@
 
 THRIFTCODE= \
             src/Collections/THashSet.cs \
+            src/Collections/TCollections.cs \
             src/Properties/AssemblyInfo.cs \
+            src/Protocol/TAbstractBase.cs \
             src/Protocol/TBase.cs \
             src/Protocol/TBase64Utils.cs \
             src/Protocol/TJSONProtocol.cs \
@@ -31,6 +33,9 @@ THRIFTCODE= \
             src/Protocol/TProtocolUtil.cs \
             src/Protocol/TMessageType.cs \
             src/Protocol/TProtocol.cs \
+            src/Protocol/TProtocolDecorator.cs \
+            src/Protocol/TMultiplexedProtocol.cs \
+            src/Protocol/TMultiplexedProcessor.cs \
             src/Protocol/TType.cs \
             src/Protocol/TField.cs \
             src/Protocol/TMessage.cs \
@@ -52,7 +57,9 @@ THRIFTCODE= \
             src/Transport/TTransportFactory.cs \
             src/Transport/THttpClient.cs \
             src/Transport/THttpHandler.cs \
+            src/Transport/TMemoryBuffer.cs \
             src/TProcessor.cs \
+            src/TException.cs \
             src/TApplicationException.cs
 
 CSC=gmcs
@@ -69,10 +76,16 @@ Thrift.dll: $(THRIFTCODE)
 clean-local:
 	$(RM) Thrift.dll
 
+# run csharp tests?
+# check:
+# 	cd test/ThriftTest && ./maketest.sh 
+# 	cd test/Multiplex && ./maketest.sh
+    
 EXTRA_DIST = \
              $(THRIFTCODE) \
              ThriftMSBuildTask \
              src/Thrift.csproj \
              src/Thrift.sln \
              src/Thrift.WP7.csproj \
-             src/Properties/AssemblyInfo.WP7.cs
+             src/Properties/AssemblyInfo.WP7.cs \
+             test
