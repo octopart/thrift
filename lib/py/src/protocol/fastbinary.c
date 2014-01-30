@@ -893,11 +893,12 @@ skip(DecodeBuffer* input, TType type) {
 /* --- HELPER FUNCTION FOR DECODE_VAL --- */
 
 static PyObject*
-decode_val(DecodeBuffer* input, TType type, PyObject* typeargs, bool utf8str);
+decode_val(DecodeBuffer* input, TType type, PyObject* typeargs, bool utf8str,
+           PyObject* mapfuncs, char* path);
 
 static bool
 decode_struct(DecodeBuffer* input, PyObject* output, PyObject* spec_seq,
-              bool utf8str) {
+              bool utf8str, PyObject* mapfuncs, char* path) {
   int spec_seq_len = PyTuple_Size(spec_seq);
   if (spec_seq_len == -1) {
     return false;
@@ -909,6 +910,13 @@ decode_struct(DecodeBuffer* input, PyObject* output, PyObject* spec_seq,
     PyObject* item_spec;
     PyObject* fieldval = NULL;
     StructItemSpec parsedspec;
+    char new_path[300];
+    PyObject *value;
+    PyObject *arglist;
+    Py_ssize_t i;
+    Py_ssize_t len;
+    PyObject *func;
+
 
     type = readByte(input);
     if (type == -1) {
@@ -947,11 +955,28 @@ decode_struct(DecodeBuffer* input, PyObject* output, PyObject* spec_seq,
       }
     }
 
-    fieldval = decode_val(input, parsedspec.type, parsedspec.typeargs, utf8str);
+    if (mapfuncs != NULL){
+        strcpy(new_path, path);
+        if(strlen(new_path))strcat(new_path, ".");
+        strcat(new_path, PyString_AsString(parsedspec.attrname));
+    }
+    fieldval = decode_val(input, parsedspec.type, parsedspec.typeargs, utf8str,
+                          mapfuncs, new_path);
     if (fieldval == NULL) {
       return false;
     }
 
+    if (mapfuncs != NULL){
+        value = PyDict_GetItemString(mapfuncs, new_path);
+        if(value != NULL){
+            arglist = Py_BuildValue("(O O O s)", output, parsedspec.attrname, fieldval, new_path);
+            len = PyList_Size(value);
+            for (i = 0; i < len; i++) {
+                func = PyList_GetItem(value, i);
+                PyEval_CallObject(func, arglist);
+            }
+        }
+    }
     if (PyObject_SetAttr(output, parsedspec.attrname, fieldval) == -1) {
       Py_DECREF(fieldval);
       return false;
@@ -966,7 +991,8 @@ decode_struct(DecodeBuffer* input, PyObject* output, PyObject* spec_seq,
 
 // Returns a new reference.
 static PyObject*
-decode_val(DecodeBuffer* input, TType type, PyObject* typeargs, bool utf8str) {
+decode_val(DecodeBuffer* input, TType type, PyObject* typeargs, bool utf8str,
+           PyObject* mapfuncs, char* path) {
   switch (type) {
 
   case T_BOOL: {
@@ -1069,7 +1095,7 @@ decode_val(DecodeBuffer* input, TType type, PyObject* typeargs, bool utf8str) {
 
     for (i = 0; i < len; i++) {
       PyObject* item = decode_val(input, parsedargs.element_type,
-                                  parsedargs.typeargs, utf8str);
+                                  parsedargs.typeargs, utf8str, mapfuncs, path);
       if (!item) {
         Py_DECREF(ret);
         return NULL;
@@ -1124,11 +1150,13 @@ decode_val(DecodeBuffer* input, TType type, PyObject* typeargs, bool utf8str) {
     for (i = 0; i < len; i++) {
       PyObject* k = NULL;
       PyObject* v = NULL;
-      k = decode_val(input, parsedargs.ktag, parsedargs.ktypeargs, utf8str);
+      k = decode_val(input, parsedargs.ktag, parsedargs.ktypeargs, utf8str,
+                     mapfuncs, path);
       if (k == NULL) {
         goto loop_error;
       }
-      v = decode_val(input, parsedargs.vtag, parsedargs.vtypeargs, utf8str);
+      v = decode_val(input, parsedargs.vtag, parsedargs.vtypeargs, utf8str,
+                     mapfuncs, path);
       if (v == NULL) {
         goto loop_error;
       }
@@ -1166,7 +1194,7 @@ decode_val(DecodeBuffer* input, TType type, PyObject* typeargs, bool utf8str) {
       return NULL;
     }
 
-    if (!decode_struct(input, ret, parsedargs.spec, utf8str)) {
+    if (!decode_struct(input, ret, parsedargs.spec, utf8str, mapfuncs, path)) {
       Py_DECREF(ret);
       return NULL;
     }
@@ -1194,12 +1222,14 @@ decode_binary(PyObject *self, PyObject *args) {
   PyObject* transport = NULL;
   PyObject* typeargs = NULL;
   PyObject* utf8str_arg = NULL;
+  PyObject* mapfuncs = NULL;
   bool utf8str = false;
   StructTypeArgs parsedargs;
   DecodeBuffer input = {0, 0};
+  char path[] = "";
   
-  if (!PyArg_ParseTuple(args, "OOO|O", &output_obj, &transport, &typeargs, 
-                        &utf8str_arg)) {
+  if (!PyArg_ParseTuple(args, "OOO|OO", &output_obj, &transport, &typeargs, 
+                        &utf8str_arg, &mapfuncs)) {
     return NULL;
   }
 
@@ -1215,7 +1245,7 @@ decode_binary(PyObject *self, PyObject *args) {
     return NULL;
   }
 
-  if (!decode_struct(&input, output_obj, parsedargs.spec, utf8str)) {
+  if (!decode_struct(&input, output_obj, parsedargs.spec, utf8str, mapfuncs, path)) {
     free_decodebuf(&input);
     return NULL;
   }
