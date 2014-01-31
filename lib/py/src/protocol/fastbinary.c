@@ -894,11 +894,11 @@ skip(DecodeBuffer* input, TType type) {
 
 static PyObject*
 decode_val(DecodeBuffer* input, TType type, PyObject* typeargs, bool utf8str,
-           PyObject* mapfuncs, char* path);
+           PyObject* mapfuncs, char *path);
 
 static bool
 decode_struct(DecodeBuffer* input, PyObject* output, PyObject* spec_seq,
-              bool utf8str, PyObject* mapfuncs, char* path) {
+              bool utf8str, PyObject* mapfuncs, char *path) {
   int spec_seq_len = PyTuple_Size(spec_seq);
   if (spec_seq_len == -1) {
     return false;
@@ -910,12 +910,14 @@ decode_struct(DecodeBuffer* input, PyObject* output, PyObject* spec_seq,
     PyObject* item_spec;
     PyObject* fieldval = NULL;
     StructItemSpec parsedspec;
-    char new_path[300];
+    PyObject *childmapfuncs = NULL;
     PyObject *value;
     PyObject *arglist;
     Py_ssize_t i;
     Py_ssize_t len;
     PyObject *func;
+    char child_path[300] = "";
+    char *attrname;
 
 
     type = readByte(input);
@@ -956,20 +958,24 @@ decode_struct(DecodeBuffer* input, PyObject* output, PyObject* spec_seq,
     }
 
     if (mapfuncs != NULL){
-        strcpy(new_path, path);
-        if(strlen(new_path))strcat(new_path, ".");
-        strcat(new_path, PyString_AsString(parsedspec.attrname));
+        attrname = PyString_AsString(parsedspec.attrname);
+        childmapfuncs = PyDict_GetItemString(mapfuncs, attrname);
+        if (strlen(path)){
+            strcpy(child_path, path);
+            strcat(child_path, ".");
+        }
+        strcat(child_path, attrname);
     }
     fieldval = decode_val(input, parsedspec.type, parsedspec.typeargs, utf8str,
-                          mapfuncs, new_path);
+                          childmapfuncs, child_path);
     if (fieldval == NULL) {
       return false;
     }
 
-    if (mapfuncs != NULL){
-        value = PyDict_GetItemString(mapfuncs, new_path);
+    if (childmapfuncs != NULL){
+        value = PyDict_GetItemString(childmapfuncs, "");
         if(value != NULL){
-            arglist = Py_BuildValue("(O O O s)", output, parsedspec.attrname, fieldval, new_path);
+            arglist = Py_BuildValue("(O O O s)", output, parsedspec.attrname, fieldval, child_path);
             len = PyList_Size(value);
             for (i = 0; i < len; i++) {
                 func = PyList_GetItem(value, i);
@@ -992,7 +998,7 @@ decode_struct(DecodeBuffer* input, PyObject* output, PyObject* spec_seq,
 // Returns a new reference.
 static PyObject*
 decode_val(DecodeBuffer* input, TType type, PyObject* typeargs, bool utf8str,
-           PyObject* mapfuncs, char* path) {
+           PyObject* mapfuncs, char *path) {
   switch (type) {
 
   case T_BOOL: {
@@ -1245,7 +1251,8 @@ decode_binary(PyObject *self, PyObject *args) {
     return NULL;
   }
 
-  if (!decode_struct(&input, output_obj, parsedargs.spec, utf8str, mapfuncs, path)) {
+  if (!decode_struct(&input, output_obj, parsedargs.spec, utf8str, mapfuncs,
+                     path)) {
     free_decodebuf(&input);
     return NULL;
   }
